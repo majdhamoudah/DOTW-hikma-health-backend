@@ -5,6 +5,9 @@ from datetime import datetime
 from util import identity, parse_client_timestamp
 
 
+# TODO:
+# Remove translations
+
 @dataclass
 class Clinic(ClientObject):
     id: str
