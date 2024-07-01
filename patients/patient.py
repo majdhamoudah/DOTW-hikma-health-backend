@@ -15,11 +15,15 @@ class Patient(ClientObject):
     country: LanguageString
     hometown: LanguageString
     phone: str
-    updated_at: datetime
     additional_data: str
     # edited_at: datetime
+    # start V2 migration
+    government_id: str
+    external_patient_id: str
+    # end V2 migration
     created_at: datetime
     updated_at: datetime
+
 
     def client_insert_values(self):
         return [self.id,
@@ -29,6 +33,8 @@ class Patient(ClientObject):
                 self.sex,
                 self.format_string(self.country),
                 self.format_string(self.hometown),
+                self.government_id,
+                self.external_patient_id,
                 self.metadata,
                 self.phone,
                 self.format_ts(self.updated_at)]
@@ -97,7 +103,7 @@ class Patient(ClientObject):
                 ('country', cls.make_language_string),
                 ('hometown', cls.make_language_string),
                 ('phone', identity),
-                ('additional_data', identity)
+                ('additional_data', identity),
                 ('updated_at', identity)]
 
     @classmethod
@@ -110,7 +116,7 @@ class Patient(ClientObject):
                 ('country', cls.make_language_string),
                 ('hometown', cls.make_language_string),
                 ('phone', identity),
-                ('additional_data', identity)
+                ('additional_data', identity),
                 ('updated_at', parse_client_timestamp)]
 
     @classmethod
@@ -121,8 +127,8 @@ class Patient(ClientObject):
     def from_db_row(cls, db_row):
         # id, given_name, surname, date_of_birth, sex, country, hometown, phone, updated_at = db_row
         # return cls(id, LanguageString.from_id(given_name), LanguageString.from_id(surname), date_of_birth, sex, LanguageString.from_id(country), LanguageString.from_id(hometown), phone, updated_at)
-        id, given_name, surname, date_of_birth, sex, country, hometown, phone, additional_data, created_at, updated_at = db_row
-        return cls(id, given_name, surname, date_of_birth, sex, country, hometown, phone, additional_data, created_at, updated_at)
+        id, given_name, surname, date_of_birth, sex, country, hometown, phone, additional_data, government_id, external_patient_id, created_at, updated_at = db_row
+        return cls(id, given_name, surname, date_of_birth, sex, country, hometown, phone, additional_data, government_id, external_patient_id, created_at, updated_at)
 
     # def to_dict(self):
     #     return {
@@ -149,5 +155,9 @@ class Patient(ClientObject):
             'phone': self.phone,
             'additional_data': self.additional_data,
             'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'updated_at': self.updated_at,
+
+            #v2
+            'external_patient_id': self.external_patient_id,
+            'government_id': self.government_id
         }

@@ -5,9 +5,9 @@ from db_util import get_connection
 from web_errors import WebError
 from users.user import User
 from dateutil import parser
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from patients.patient import Patient
-from patients.data_access import all_patient_data, search_patients
+from patients.data_access import all_patient_data, search_patients, patient_additional_attributes
 from users.data_access import all_user_data, add_user, delete_user_by_id, user_data_by_email
 from language_strings.language_string import LanguageString
 from admin_api.patient_data_export import most_recent_export
@@ -115,8 +115,11 @@ def export_all_data(_admin_user):
 @admin_api.route('/all_patients', methods=['GET'])
 @admin_authenticated
 def get_all_patients(_admin_user):
-    all_patients = [Patient.from_db_row(r).to_dict()
-                    for r in all_patient_data()]
+    # TOMBSTONE: Jun 3 2024
+    # all_patients = [Patient.from_db_row(r).to_dict()
+    #                 for r in all_patient_data()]
+    all_patients = all_patient_data()
+
     return jsonify({'patients': all_patients})
 
 
@@ -276,8 +279,8 @@ def update_event_form(admin_user):
                         event_form_update['language'],
                         event_form_update['is_editable'],
                         event_form_update['is_snapshot_form'],
-                        datetime.now(),
-                        datetime.now(),
+                        datetime.now(timezone.utc),
+                        datetime.now(timezone.utc),
                         event_form_id
                     )
                 )
