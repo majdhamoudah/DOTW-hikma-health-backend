@@ -457,7 +457,7 @@ def get_patient_events(_admin_user):
     patient_id = request.args.get('id')
 
 
-@admin_api.route("/get_event_form_data", methods=['GET'])
+@admin_api.route("/OLD_get_event_form_data", methods=['GET'])
 @admin_authenticated
 def get_event_form_data(_admin_user):
     """Retruns all the formated events as a single table that can be easily rendered"""
@@ -534,3 +534,73 @@ def get_event_form_data(_admin_user):
                 raise e
 
     return jsonify({'events': events})
+
+
+
+@admin_api.route("/get_event_form_data", methods=['GET'])
+@admin_authenticated
+def _get_event_form_data(id: str):
+    """Returns all the formated events as a single table that can be easily rendered"""
+
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+
+    where_clause = []
+    if start_date is not None:
+        start_date = utc.from_datetime(
+            datetime.fromisoformat(urlparse.unquote(start_date))
+        )
+
+        where_clause.append("e.created_at >= %(start_date)s")
+
+    if end_date is not None:
+        end_date = utc.from_datetime(
+            datetime.fromisoformat(urlparse.unquote(end_date)))
+
+        where_clause.append("e.created_at <= %(end_date)s")
+
+    events = []
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """SELECT events.id, events.patient_id, events.visit_id, events.form_id, events.event_type, events.form_data, events.metadata, events.is_deleted, events.created_at, events.updated_at,
+                                  patients.*
+                                  FROM events
+                                  JOIN patients ON events.patient_id = patients.id
+                                  WHERE events.form_id = %s AND events.is_deleted = false AND events.created_at >= %s AND events.created_at <= %s AND patients.is_deleted = false
+                                  """,
+                    (id, start_date, end_date),
+                )
+
+                # Get column names from the cursor description
+                column_names = [desc[0] for desc in cur.description]
+
+                for entry in cur.fetchall():
+                    # Slice the relevant columns for the patient data
+                    patient_data = entry[10:]
+                    # Create the patient object using 'zip' for pairing
+                    patient = dict(zip(column_names[10:], patient_data))
+
+                    events.append(
+                        {
+                            "id": entry[0],
+                            "patientId": entry[1],
+                            "visitId": entry[2],
+                            "formId": entry[3],
+                            "eventType": entry[4],
+                            "formData": entry[5],
+                            "metadata": entry[6],
+                            "isDeleted": entry[7],
+                            "createdAt": entry[8],
+                            "updatedAt": entry[9],
+                            "patient": patient,
+                        }
+                    )
+            except Exception as e:
+                print("Error while updating the patient registration form: ", e)
+                raise e
+
+        return events
+
+
