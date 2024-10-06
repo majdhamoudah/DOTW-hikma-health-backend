@@ -5,7 +5,7 @@ from db_util import get_connection
 from web_errors import WebError
 from users.user import User
 from dateutil import parser
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from patients.patient import Patient
 from patients.data_access import all_patient_data, search_patients, patient_additional_attributes
 from users.data_access import all_user_data, add_user, delete_user_by_id, user_data_by_email
@@ -14,6 +14,7 @@ from admin_api.patient_data_export import most_recent_export
 from admin_api.single_patient_data_export import single_patient_export
 
 import urllib.parse
+from urllib import parse as urlparse
 from urllib.parse import unquote
 import uuid
 import bcrypt
@@ -21,6 +22,10 @@ import psycopg2.errors
 
 
 admin_api = Blueprint('admin_api', __name__, url_prefix='/api/admin')
+
+def from_datetime(dt: datetime):
+    """Normalizes the datetime input to a UTC datetime."""
+    return dt.astimezone(tz=UTC)
 
 
 @admin_api.route('/login', methods=['POST'])
@@ -547,14 +552,14 @@ def _get_event_form_data(id: str):
 
     where_clause = []
     if start_date is not None:
-        start_date = utc.from_datetime(
+        start_date = from_datetime(
             datetime.fromisoformat(urlparse.unquote(start_date))
         )
 
         where_clause.append("e.created_at >= %(start_date)s")
 
     if end_date is not None:
-        end_date = utc.from_datetime(
+        end_date = from_datetime(
             datetime.fromisoformat(urlparse.unquote(end_date)))
 
         where_clause.append("e.created_at <= %(end_date)s")
