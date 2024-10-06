@@ -505,6 +505,7 @@ def get_event_form_data(_admin_user):
                                   FROM events
                                   JOIN patients ON events.patient_id = patients.id
                                   WHERE events.form_id = %s AND events.is_deleted = false AND events.created_at >= %s AND events.created_at <= %s
+                                  ORDER BY events.created_at ASC
                                   """, (form_id, start_date, end_date))
                 
                 # Get column names from the cursor description
