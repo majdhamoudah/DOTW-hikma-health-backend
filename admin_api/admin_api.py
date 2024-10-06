@@ -469,7 +469,7 @@ def get_event_form_data(_admin_user):
         # datetime.datetime.fromisoformat
         start_date = datetime.fromisoformat(unquote(start_date)).replace(hour=0, minute=1, second=1)
     except ValueError:
-        start_date = datetime.now() - timedelta(days=14)
+        start_date = datetime.now() - timedelta(days=365)
 
     end_date = request.args.get('end_date')
     try:
