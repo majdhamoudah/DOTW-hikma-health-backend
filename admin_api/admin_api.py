@@ -5,7 +5,7 @@ from db_util import get_connection
 from web_errors import WebError
 from users.user import User
 from dateutil import parser
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import datetime, timedelta, timezone
 from patients.patient import Patient
 from patients.data_access import all_patient_data, search_patients, patient_additional_attributes
 from users.data_access import all_user_data, add_user, delete_user_by_id, user_data_by_email
@@ -14,7 +14,6 @@ from admin_api.patient_data_export import most_recent_export
 from admin_api.single_patient_data_export import single_patient_export
 
 import urllib.parse
-from urllib import parse as urlparse
 from urllib.parse import unquote
 import uuid
 import bcrypt
@@ -22,10 +21,6 @@ import psycopg2.errors
 
 
 admin_api = Blueprint('admin_api', __name__, url_prefix='/api/admin')
-
-def from_datetime(dt: datetime):
-    """Normalizes the datetime input to a UTC datetime."""
-    return dt.astimezone(tz=UTC)
 
 
 @admin_api.route('/login', methods=['POST'])
@@ -462,7 +457,7 @@ def get_patient_events(_admin_user):
     patient_id = request.args.get('id')
 
 
-@admin_api.route("/OLD_get_event_form_data", methods=['GET'])
+@admin_api.route("/get_event_form_data", methods=['GET'])
 @admin_authenticated
 def get_event_form_data(_admin_user):
     """Retruns all the formated events as a single table that can be easily rendered"""
@@ -539,73 +534,3 @@ def get_event_form_data(_admin_user):
                 raise e
 
     return jsonify({'events': events})
-
-
-
-@admin_api.route("/get_event_form_data", methods=['GET'])
-@admin_authenticated
-def _get_event_form_data(id: str):
-    """Returns all the formated events as a single table that can be easily rendered"""
-
-    start_date = request.args.get("start_date")
-    end_date = request.args.get("end_date")
-
-    where_clause = []
-    if start_date is not None:
-        start_date = from_datetime(
-            datetime.fromisoformat(urlparse.unquote(start_date))
-        )
-
-        where_clause.append("e.created_at >= %(start_date)s")
-
-    if end_date is not None:
-        end_date = from_datetime(
-            datetime.fromisoformat(urlparse.unquote(end_date)))
-
-        where_clause.append("e.created_at <= %(end_date)s")
-
-    events = []
-    with db.get_connection() as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute(
-                    """SELECT events.id, events.patient_id, events.visit_id, events.form_id, events.event_type, events.form_data, events.metadata, events.is_deleted, events.created_at, events.updated_at,
-                                  patients.*
-                                  FROM events
-                                  JOIN patients ON events.patient_id = patients.id
-                                  WHERE events.form_id = %s AND events.is_deleted = false AND events.created_at >= %s AND events.created_at <= %s AND patients.is_deleted = false
-                                  """,
-                    (id, start_date, end_date),
-                )
-
-                # Get column names from the cursor description
-                column_names = [desc[0] for desc in cur.description]
-
-                for entry in cur.fetchall():
-                    # Slice the relevant columns for the patient data
-                    patient_data = entry[10:]
-                    # Create the patient object using 'zip' for pairing
-                    patient = dict(zip(column_names[10:], patient_data))
-
-                    events.append(
-                        {
-                            "id": entry[0],
-                            "patientId": entry[1],
-                            "visitId": entry[2],
-                            "formId": entry[3],
-                            "eventType": entry[4],
-                            "formData": entry[5],
-                            "metadata": entry[6],
-                            "isDeleted": entry[7],
-                            "createdAt": entry[8],
-                            "updatedAt": entry[9],
-                            "patient": patient,
-                        }
-                    )
-            except Exception as e:
-                print("Error while updating the patient registration form: ", e)
-                raise e
-
-        return events
-
-
