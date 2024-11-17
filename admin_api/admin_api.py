@@ -1,5 +1,5 @@
 import json
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, logging, request, jsonify, send_file
 from web_util import assert_data_has_keys, admin_authenticated
 from db_util import get_connection
 from web_errors import WebError
@@ -20,7 +20,8 @@ import bcrypt
 import psycopg2.errors
 
 
-admin_api = Blueprint('admin_api', __name__, url_prefix='/api/admin')
+# admin_api = Blueprint('admin_api', __name__, url_prefix='/api/admin')
+admin_api = Blueprint('admin_api', __name__, url_prefix='/admin_api')
 
 
 @admin_api.route('/login', methods=['POST'])
@@ -467,13 +468,15 @@ def get_event_form_data(_admin_user):
     try:
         # Convert start_date from string to datetime
         # datetime.datetime.fromisoformat
-        start_date = datetime.fromisoformat(unquote(start_date)).replace(hour=0, minute=1, second=1)
+        start_date = datetime.fromisoformat(
+            unquote(start_date)).replace(hour=0, minute=1, second=1)
     except ValueError:
         start_date = datetime.now() - timedelta(days=365)
 
     end_date = request.args.get('end_date')
     try:
-        end_date = datetime.fromisoformat(unquote(end_date)).replace(hour=23, minute=59, second=59)
+        end_date = datetime.fromisoformat(
+            unquote(end_date)).replace(hour=23, minute=59, second=59)
     except ValueError:
         end_date = datetime.now().replace(hour=23, minute=59, second=59)
 
@@ -507,10 +510,10 @@ def get_event_form_data(_admin_user):
                                   WHERE events.form_id = %s AND events.is_deleted = false AND events.created_at >= %s AND events.created_at <= %s
                                   ORDER BY events.created_at ASC
                                   """, (form_id, start_date, end_date))
-                
+
                 # Get column names from the cursor description
                 column_names = [desc[0] for desc in cur.description]
-                
+
                 for entry in cur.fetchall():
                     # Slice the relevant columns for the patient data
                     patient_data = entry[10:]
@@ -535,3 +538,187 @@ def get_event_form_data(_admin_user):
                 raise e
 
     return jsonify({'events': events})
+
+
+# ------------------------------------------------------------------------------------------------
+
+@admin_api.route("/database/export", methods=['GET'])
+@admin_authenticated
+def export_full_database(_admin_user):
+    """Downloads all data from the database in JSON format"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Define tables to export in order of dependencies
+                tables = [
+                    "clinics",
+                    "users",
+                    "patients",
+                    "patient_additional_attributes",
+                    "visits",
+                    "events",
+                    "event_forms",
+                    "patient_registration_forms",
+                    "string_ids",
+                    "string_content"
+                ]
+
+                data = {}
+
+                for table in tables:
+                    cur.execute(
+                        f"""
+                        SELECT *
+                        FROM {table}
+                        """
+                    )
+                    results = cur.fetchall()
+                    data[table] = results
+
+                return jsonify({
+                    "exported_at": datetime.now(timezone.utc).isoformat(),
+                    "schema_version": "1.0",
+                    "data": data
+                })
+
+    except Exception as e:
+        logging.error(f"Error during database export: {str(e)}")
+        return jsonify({"error": "An error occurred during export"}), 500
+
+
+@admin_api.route("/database/import", methods=['POST'])
+@admin_authenticated
+def import_full_database(_admin_user):
+    """Imports a full database dump, with transaction rollback on failure"""
+
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+
+    if "data" not in data:
+        return jsonify({"error": "Missing data field"}), 400
+
+    tables = data["data"]
+
+    # Define columns that should be treated as JSON
+    json_columns = {
+        "events": ["form_data", "metadata"],
+        "event_forms": ["metadata"],
+        "patient_registration_forms": ["fields", "metadata"],
+        "patients": ["additional_data", "metadata"],
+        "patient_additional_attributes": ["metadata"],
+        "visits": ["metadata"]
+    }
+
+    # Define primary key constraints for each table
+    table_primary_keys = {
+        "clinics": ["id"],
+        "users": ["id"],
+        "patients": ["id"],
+        # composite key
+        "patient_additional_attributes": ["patient_id", "attribute_id"],
+        "event_forms": ["id"],
+        "visits": ["id"],
+        "events": ["id"],
+        "patient_registration_forms": ["id"],
+        "string_ids": ["id"],
+        "string_content": None  # No UPSERT for this table
+    }
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("BEGIN")
+
+                for table_name in [
+                    "clinics",
+                    "users",
+                    "patients",
+                    "patient_additional_attributes",
+                    "event_forms",
+                    "visits",
+                    "events",
+                    "patient_registration_forms",
+                    "string_ids",
+                    "string_content"
+                ]:
+                    if table_name not in tables:
+                        raise Exception(
+                            f"Table {table_name} not found in data")
+
+                    records = tables[table_name]
+                    if not records:
+                        continue
+
+                    columns = records[0].keys()
+                    column_str = ", ".join(f'"{col}"' for col in columns)
+                    value_str = ", ".join(f"%({col})s" for col in columns)
+
+                    # Generate appropriate query based on primary keys
+                    primary_keys = table_primary_keys.get(table_name)
+                    if primary_keys is None:
+                        # Simple INSERT for tables without UPSERT
+                        query = f"""
+                            INSERT INTO {table_name} ({column_str})
+                            VALUES ({value_str})
+                        """
+                    else:
+                        # UPSERT with specified primary keys
+                        primary_key_str = ", ".join(primary_keys)
+                        update_str = ", ".join([
+                            f'"{col}" = EXCLUDED."{col}"'
+                            for col in columns
+                            if col not in primary_keys
+                        ])
+
+                        query = f"""
+                            INSERT INTO {table_name} ({column_str})
+                            VALUES ({value_str})
+                            ON CONFLICT ({primary_key_str}) DO UPDATE SET
+                            {update_str}
+                        """
+
+                    # Execute each record individually to better handle errors
+                    for record in records:
+                        try:
+                            processed_record = {}
+                            for key, value in record.items():
+                                if isinstance(value, datetime):
+                                    processed_record[key] = value.isoformat()
+                                # Handle JSON columns
+                                elif table_name in json_columns and key in json_columns[table_name]:
+                                    if isinstance(value, (dict, list)):
+                                        processed_record[key] = json.dumps(
+                                            value)
+                                    else:
+                                        processed_record[key] = value
+                                else:
+                                    processed_record[key] = value
+
+                            cur.execute(query, processed_record)
+                        except Exception as e:
+                            logging.error(f"Error importing record in {
+                                          table_name}: {str(e)}")
+                            logging.error(f"Record: {record}")
+                            raise
+
+                # Commit transaction
+                cur.execute("COMMIT")
+
+                return jsonify({
+                    "ok": True,
+                    "message": "Database import completed successfully",
+                    "records_imported": {table: len(records) for table, records in tables.items()}
+                })
+
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+        logging.error(f"Error during database import: {str(e)}")
+        return jsonify({
+            "error": "An error occurred during import",
+            "details": str(e)
+        }), 500
+
+# ------------------------------------------------------------------------------------------------
