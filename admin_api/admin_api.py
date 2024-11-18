@@ -566,14 +566,24 @@ def export_full_database(_admin_user):
                 data = {}
 
                 for table in tables:
-                    cur.execute(
-                        f"""
-                        SELECT *
-                        FROM {table}
-                        """
-                    )
+                    # Get column names
+                    cur.execute(f"""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = %s
+                        ORDER BY ordinal_position
+                    """, (table,))
+                    columns = [col[0] for col in cur.fetchall()]
+
+                    # Get data
+                    cur.execute(f"SELECT * FROM {table}")
                     results = cur.fetchall()
-                    data[table] = results
+
+                    # Convert to list of dicts with column names as keys
+                    data[table] = [
+                        dict(zip(columns, row))
+                        for row in results
+                    ]
 
                 return jsonify({
                     "exported_at": datetime.now(timezone.utc).isoformat(),
