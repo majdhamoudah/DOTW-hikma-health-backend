@@ -698,8 +698,8 @@ def import_full_database(_admin_user):
 
                             cur.execute(query, processed_record)
                         except Exception as e:
-                            logging.error(f"Error importing record in {
-                                          table_name}: {str(e)}")
+                            logging.error(f"""Error importing record in {
+                                          table_name}: {str(e)}""")
                             logging.error(f"Record: {record}")
                             raise
 
