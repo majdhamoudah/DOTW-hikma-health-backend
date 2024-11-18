@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python version
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -36,7 +36,7 @@ jobs:
         run: zip release.zip ./* -r
 
       - name: Upload artifact for deployment jobs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: python-app
           path: |
@@ -54,7 +54,7 @@ jobs:
 
     steps:
       - name: Download artifact from build job
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: python-app
 
@@ -63,14 +63,14 @@ jobs:
 
       
       - name: Login to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_27EDA9CC5DA94C8883ED3F05C4EC84D9 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_573A7A4ECA09458EA6A436FC94090B27 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_2EA2AEF7C9974A7A8004DFADC2958928 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_D484C7A449F541EC8605012C482354F5 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_24CF8CC85E414086AA91D26F10F169AB }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E2833821316D4C0B91228982F207B717 }}
 
       - name: 'Deploy to Azure Web App'
-        uses: azure/webapps-deploy@v2
+        uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
           app-name: 'dotw-hikma'
