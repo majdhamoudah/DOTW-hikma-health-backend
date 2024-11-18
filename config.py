@@ -6,6 +6,7 @@ ENV = os.environ.get("APP_ENV", "dev_local")
 
 print("ENV: ", os.getenv("APP_ENV"))
 
+
 FLASK_DEBUG_PORT = 5000
 
 # if ENV in ("dev_local", "dev_docker", "stg"):
